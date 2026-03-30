@@ -41,3 +41,75 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+
+### UML Diagram (Refined)
+
+```mermaid
+classDiagram
+direction TB
+
+class Dashboard {
+	- session_state: dict
+	+ render_owner_details(owner: Owner): void
+	+ render_pet_details(pet: Pet): void
+	+ render_schedule_details(tasks: List~Task~): void
+	+ run(): void
+}
+
+class Scheduler {
+	- pets: List~Pet~
+	- tasks: List~Task~
+	+ add_pet(pet: Pet): void
+	+ add_task(task: Task, owner: Owner): void
+	+ schedule_walk(pet: Pet, owner: Owner, due_time: datetime, duration_mins: int): Task
+	+ get_today_tasks(owner: Owner): List~Task~
+	+ get_all_pets(): List~Pet~
+}
+
+class Owner {
+	- id: int
+	- name: string
+	- email: string
+	+ getId(): int
+	+ getName(): string
+	+ getEmail(): string
+}
+
+class Pet {
+	- id: int
+	- name: string
+	- species: string
+	- age: int
+	- owner_id: int
+	+ getId(): int
+	+ getName(): string
+	+ getSpecies(): string
+	+ getAge(): int
+}
+
+class Task {
+	- id: int
+	- description: string
+	- task_type: string
+	- due_time: datetime
+	- duration_mins: int
+	- is_completed: bool
+	+ mark_complete(): void
+	+ is_today(): bool
+}
+
+Owner "1" o-- "0..*" Pet : owns
+Scheduler "1" o-- "0..*" Pet : manages
+Scheduler "1" o-- "0..*" Task : manages
+
+Dashboard ..> Owner : displays details
+Dashboard ..> Pet : displays details
+Dashboard ..> Scheduler : requests today schedule
+Dashboard ..> Task : renders scheduled tasks
+```
+
+Notes:
+- The original `Schedule` and `Scheduler` responsibilities are merged into `Scheduler`.
+- `Dashboard` is a presentation layer that displays owner, pet, and task schedule details.
+- `Scheduler` is the orchestration layer that manages pets/tasks and returns daily plans.

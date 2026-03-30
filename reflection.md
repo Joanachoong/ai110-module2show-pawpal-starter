@@ -5,12 +5,26 @@
 **a. Initial design**
 
 - Briefly describe your initial UML design.
+
+My initial UML design separated planning data from planning logic. I created both a Schedule class and a Scheduler class, but at that stage they had overlapping responsibilities. I also duplicated task-adding behavior between Owner and Schedule, which made the design less clear.
+
 - What classes did you include, and what responsibilities did you assign to each?
+
+OHere are the **5 classes** in your UML class diagram:
+
+1. **Dashboard** — display all the information 
+2. **Scheduler** — applies rules and constraints to choose and order tasks.
+3. **Owner** — stores owner information and preferences, and provides constraints such as available time.
+4. **Pet** — stores pet profile details such as name, species, and care-related attributes.
+5. **Task** — represents a care task with fields like title, duration, and priority.
+
 
 **b. Design changes**
 
-- Did your design change during implementation?
+- Did your design change during implementation? Yes
+
 - If yes, describe at least one change and why you made it.
+Given that I merged schedule and scheduler into one class in the end given they share the same feature . Other than that, i removed the duplicate fucntion that was shown in both Owner and schedualer class.  
 
 ---
 
