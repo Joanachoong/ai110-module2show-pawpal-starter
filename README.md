@@ -115,8 +115,8 @@ class Dashboard {
     + run(): void
 }
 
-Owner "1" *-- "0..*" Pet : owns
-Pet "1" *-- "0..*" Task : associated with
+Owner "1" *--> "0..*" Pet : owns
+Pet "1" *--> "0..*" Task : associated with
 Scheduler "1" o-- "0..*" Task : manages
 
 Dashboard ..> Owner : displays details
