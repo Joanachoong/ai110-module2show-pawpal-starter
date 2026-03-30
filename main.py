@@ -11,7 +11,10 @@ buddy = Pet(id=1, name="Buddy", species="Dog", age=3, owner_id=owner.getId())
 whiskers = Pet(id=2, name="Whiskers", species="Cat", age=5, owner_id=owner.getId())
 
 owner.add_pet(buddy)
+print(f"✔ Pet added: {buddy.getName()} ({buddy.getSpecies()}) -> Owner: {owner.getName()} (ID: {owner.getId()}, Email: {owner.getEmail()})")
+
 owner.add_pet(whiskers)
+print(f"✔ Pet added: {whiskers.getName()} ({whiskers.getSpecies()}) -> Owner: {owner.getName()} (ID: {owner.getId()}, Email: {owner.getEmail()})")
 
 # --- Set up Scheduler ---
 scheduler = Scheduler()
