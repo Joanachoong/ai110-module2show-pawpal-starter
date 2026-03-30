@@ -115,8 +115,22 @@ class Scheduler:
         self._next_task_id: int = 1
         self._pet_registry: dict = {}  # pet_id -> Pet, for internal lookup
 
+    def _is_duplicate_task_for_pet(self, task: Task, pet: Pet) -> bool:
+        """Return whether an equivalent task already exists for the pet."""
+        incoming_description = task.description.strip().lower()
+        return any(
+            existing.task_type == task.task_type
+            and existing.description.strip().lower() == incoming_description
+            and existing.duration_mins == task.duration_mins
+            and existing.due_time == task.due_time
+            for existing in pet.get_tasks()
+        )
+
     def add_task(self, task: Task, owner: Owner, pet: Pet) -> None:
         """Assign IDs and register a task for an owner and pet."""
+        if self._is_duplicate_task_for_pet(task, pet):
+            raise ValueError("adding task failed: duplicate task for pet with same details")
+
         task.id = self._next_task_id
         self._next_task_id += 1
         task.owner_id = owner.getId()

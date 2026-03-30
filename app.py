@@ -180,8 +180,7 @@ else:
         )
 
         if duplicate_exists:
-            st.warning("Duplicate task detected for this pet with the same details.")
-            st.error("Task failed: An exact same task has already been added.")
+            st.warning("Task not added: A duplicate task for this pet already exists.")
         else:
             new_task = Task(
                 id=0,
@@ -195,8 +194,11 @@ else:
                 frequency=frequency,
                 is_template=is_template_task,
             )
-            st.session_state.scheduler.add_task(new_task, st.session_state.owner, selected_pet)
-            st.rerun()
+            try:
+                st.session_state.scheduler.add_task(new_task, st.session_state.owner, selected_pet)
+                st.rerun()
+            except ValueError:
+                st.warning("Task not added: A duplicate task for this pet already exists.")
 
 # Task list with mark-complete buttons
 all_tasks = [
