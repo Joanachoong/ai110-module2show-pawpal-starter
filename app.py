@@ -128,6 +128,7 @@ else:
         duration = st.number_input("Duration (min)", min_value=1, max_value=240, value=30)
     with tc3:
         priority = st.selectbox("Priority", ["high", "medium", "low"])
+        frequency = st.selectbox("Frequency", ["once", "daily", "weekdays"])
         due_time_input = st.time_input(
             "Due time",
             value=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0).time(),
@@ -137,41 +138,91 @@ else:
         pet_id = pet_names[task_pet_name]
         selected_pet = st.session_state.pets[pet_id]
         due_dt = datetime.combine(date.today(), due_time_input)
+        normalized_description = task_description.strip().lower()
+        is_template_task = frequency != "once"
 
-        new_task = Task(
-            id=0,
-            description=task_description,
-            task_type=task_type,
-            due_time=due_dt,
-            duration_mins=int(duration),
-            pet_name=selected_pet.getName(),
-            owner_name=st.session_state.owner.getName(),
-            priority=priority,
+        duplicate_exists = any(
+            task.pet_id == selected_pet.getId()
+            and task.task_type == task_type
+            and task.description.strip().lower() == normalized_description
+            and task.duration_mins == int(duration)
+            and task.due_time == due_dt
+            and task.is_template == is_template_task
+            and (not is_template_task or task.frequency == frequency)
+            for task in st.session_state.scheduler.get_all_tasks(st.session_state.owner)
         )
-        st.session_state.scheduler.add_task(new_task, st.session_state.owner, selected_pet)
-        st.rerun()
+
+        if duplicate_exists:
+            st.warning("Duplicate task detected for this pet with the same details.")
+            st.error("Task failed: An exact same task has already been added.")
+        else:
+            new_task = Task(
+                id=0,
+                description=task_description,
+                task_type=task_type,
+                due_time=due_dt,
+                duration_mins=int(duration),
+                pet_name=selected_pet.getName(),
+                owner_name=st.session_state.owner.getName(),
+                priority=priority,
+                frequency=frequency,
+                is_template=is_template_task,
+            )
+            st.session_state.scheduler.add_task(new_task, st.session_state.owner, selected_pet)
+            st.rerun()
 
 # Task list with mark-complete buttons
-all_tasks = st.session_state.scheduler.get_all_tasks(st.session_state.owner)
+st.session_state.scheduler.get_today_tasks(st.session_state.owner)
+all_tasks = [
+    task
+    for task in st.session_state.scheduler.get_all_tasks(st.session_state.owner)
+    if not task.is_template
+]
 if all_tasks:
     st.write("**All tasks:**")
     priority_badge = {"high": "🔴", "medium": "🟡", "low": "🟢"}
     for task in sorted(all_tasks, key=lambda t: t.due_time):
         status = "✅" if task.is_completed else "🕐"
         badge = priority_badge.get(task.priority, "")
-        col_info, col_btn = st.columns([5, 1])
+        col_info, col_btn, col_remove = st.columns([5, 1, 1])
         with col_info:
             st.write(
                 f"{status} {badge} **{task.task_type.capitalize()}** — {task.description} "
                 f"| {task.pet_name} | {task.due_time.strftime('%I:%M %p')} | {task.duration_mins} min"
             )
         with col_btn:
-            if not task.is_completed:
-                if st.button("Done", key=f"complete_{task.id}"):
+            label = "Undo" if task.is_completed else "Done"
+            if st.button(label, key=f"toggle_{task.id}"):
+                if task.is_completed:
+                    task.is_completed = False
+                else:
                     task.mark_complete()
-                    st.rerun()
+                st.rerun()
+        with col_remove:
+            if st.button("Remove", key=f"remove_{task.id}"):
+                st.session_state.scheduler.remove_task(task.id)
+                st.rerun()
 else:
     st.info("No tasks yet. Add one above.")
+
+templates = [
+    task
+    for task in st.session_state.scheduler.get_all_tasks(st.session_state.owner)
+    if task.is_template
+]
+if templates:
+    st.write("**Recurring templates:**")
+    for template in sorted(templates, key=lambda t: (t.pet_name, t.due_time.time())):
+        col_template, col_delete = st.columns([5, 1])
+        with col_template:
+            st.write(
+                f"🔁 **{template.task_type.capitalize()}** — {template.description} "
+                f"| {template.pet_name} | {template.frequency} | {template.due_time.strftime('%I:%M %p')}"
+            )
+        with col_delete:
+            if st.button("Delete", key=f"delete_template_{template.id}"):
+                st.session_state.scheduler.remove_task(template.id)
+                st.rerun()
 
 st.divider()
 

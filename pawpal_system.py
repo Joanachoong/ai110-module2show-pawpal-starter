@@ -90,6 +90,10 @@ class Task:
     owner_id: int = 0
     pet_id: int = 0
     is_completed: bool = False
+    frequency: str = "once"  # "once" | "daily" | "weekdays"
+    is_template: bool = False
+    parent_task_id: int = 0
+    generated_for: Optional[date] = None
 
     def mark_complete(self) -> None:
         """Mark this task as completed."""
@@ -98,6 +102,10 @@ class Task:
     def is_today(self) -> bool:
         """Return whether this task is due today."""
         return self.due_time.date() == date.today()
+
+    def is_overdue(self) -> bool:
+        """Return whether this task is overdue and incomplete."""
+        return (not self.is_completed) and (self.due_time < datetime.now())
 
 
 class Scheduler:
@@ -116,6 +124,47 @@ class Scheduler:
         self._tasks.append(task)
         pet._tasks.append(task)
         self._pet_registry[pet.getId()] = pet
+
+    def _should_generate_for_day(self, template: Task, target_day: date) -> bool:
+        """Return whether a template should generate an instance on target day."""
+        if template.frequency == "daily":
+            return True
+        if template.frequency == "weekdays":
+            return target_day.weekday() < 5
+        return False
+
+    def _spawn_recurring_tasks_for_date(self, owner: Owner, target_day: date) -> None:
+        """Generate daily task instances from recurring templates."""
+        for pet in owner.get_pets():
+            templates = [task for task in pet.get_tasks() if task.is_template]
+            for template in templates:
+                if not self._should_generate_for_day(template, target_day):
+                    continue
+
+                already_generated = any(
+                    task.parent_task_id == template.id
+                    and task.generated_for == target_day
+                    for task in pet.get_tasks()
+                )
+                if already_generated:
+                    continue
+
+                due_dt = datetime.combine(target_day, template.due_time.time())
+                generated_task = Task(
+                    id=0,
+                    description=template.description,
+                    task_type=template.task_type,
+                    due_time=due_dt,
+                    duration_mins=template.duration_mins,
+                    pet_name=template.pet_name,
+                    owner_name=template.owner_name,
+                    priority=template.priority,
+                    frequency="once",
+                    is_template=False,
+                    parent_task_id=template.id,
+                    generated_for=target_day,
+                )
+                self.add_task(generated_task, owner, pet)
 
     def get_task(self, task_id: int) -> Optional[Task]:
         """Return the task with the given ID, if found."""
@@ -136,10 +185,18 @@ class Scheduler:
         task = self.get_task(task_id)
         if task is None:
             return False
+
+        child_ids: List[int] = []
+        if task.is_template:
+            child_ids = [t.id for t in self._tasks if t.parent_task_id == task.id]
+
         self._tasks = [t for t in self._tasks if t.id != task_id]
         pet = self._pet_registry.get(task.pet_id)
         if pet is not None:
             pet._tasks = [t for t in pet._tasks if t.id != task_id]
+
+        for child_id in child_ids:
+            self.remove_task(child_id)
         return True
 
     def schedule_walk(
@@ -169,17 +226,29 @@ class Scheduler:
         return [task for pet in owner.get_pets() for task in pet.get_tasks()]
 
     def get_today_tasks(self, owner: Owner) -> List[Task]:
-        """Return incomplete tasks that are due today."""
+        """Return incomplete tasks due today plus overdue tasks."""
+        self._spawn_recurring_tasks_for_date(owner, date.today())
         return [
             t for t in self.get_all_tasks(owner)
-            if t.is_today() and not t.is_completed
+            if not t.is_template
+            and not t.is_completed
+            and t.due_time.date() <= date.today()
         ]
 
     def generate_schedule(self, owner: Owner, available_mins: int) -> List[Task]:
-        """Build a priority-based schedule within available minutes."""
+        """Build a schedule that prioritizes overdue and high-priority tasks."""
         priority_order = {"high": 0, "medium": 1, "low": 2}
+        now = datetime.now()
         pending = self.get_today_tasks(owner)
-        ranked = sorted(pending, key=lambda t: priority_order.get(t.priority, 1))
+        ranked = sorted(
+            pending,
+            key=lambda t: (
+                0 if t.due_time < now else 1,
+                priority_order.get(t.priority, 1),
+                t.due_time,
+                t.duration_mins,
+            ),
+        )
         scheduled, remaining = [], available_mins
         for task in ranked:
             if task.duration_mins <= remaining:
