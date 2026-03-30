@@ -53,9 +53,13 @@ class Owner {
     - id: int
     - name: string
     - email: string
+    - _pets: List~Pet~
     + getId(): int
     + getName(): string
     + getEmail(): string
+    + add_pet(pet: Pet): void
+    + get_pets(): List~Pet~
+    + get_pet_ids(): List~int~
 }
 
 class Pet {
@@ -64,11 +68,13 @@ class Pet {
     - species: string
     - age: int
     - owner_id: int
+    - _tasks: List~Task~
     + getId(): int
     + getName(): string
     + getSpecies(): string
     + getAge(): int
     + getOwnerId(): int
+    + get_tasks(): List~Task~
 }
 
 class Task {
@@ -81,24 +87,24 @@ class Task {
     - owner_name: string
     - priority: string ~~low / medium / high~~
     - owner_id: int
+    - pet_id: int
     - is_completed: bool
     + mark_complete(): void
     + is_today(): bool
 }
 
 class Scheduler {
-    - pets: List~Pet~
-    - tasks: List~Task~
-    - next_task_id: int
-    + add_pet(pet: Pet): void
-    + add_task(task: Task, owner: Owner): void
+    - _tasks: List~Task~
+    - _next_task_id: int
+    - _pet_registry: dict
+    + add_task(task: Task, owner: Owner, pet: Pet): void
     + get_task(task_id: int): Task
     + edit_task(task_id: int, kwargs): bool
     + remove_task(task_id: int): bool
     + schedule_walk(pet, owner, due_time, duration_mins, priority): Task
+    + get_all_tasks(owner: Owner): List~Task~
     + get_today_tasks(owner: Owner): List~Task~
     + generate_schedule(owner: Owner, available_mins: int): List~Task~
-    + get_all_pets(): List~Pet~
 }
 
 class Dashboard {
@@ -110,7 +116,7 @@ class Dashboard {
 }
 
 Owner "1" *-- "0..*" Pet : owns
-Scheduler "1" o-- "0..*" Pet : manages
+Pet "1" *-- "0..*" Task : associated with
 Scheduler "1" o-- "0..*" Task : manages
 
 Dashboard ..> Owner : displays details
@@ -121,6 +127,7 @@ Dashboard ..> Task : renders tasks
 ```
 
 Notes:
-- The original `Schedule` and `Scheduler` responsibilities are merged into `Scheduler`.
-- `Dashboard` is a presentation layer that displays owner, pet, and task schedule details.
-- `Scheduler` is the orchestration layer that manages pets/tasks and returns daily plans.
+- **Owner** controls pet membership via `add_pet()` and provides read access through `get_pets()` / `get_pet_ids()`.
+- **Pet** passively holds its associated tasks (`_tasks`); tasks are added/removed only by Scheduler.
+- **Task** now carries a `pet_id` field so Scheduler can sync removals back to the correct Pet.
+- **Scheduler** is the sole authority for task mutation (`add_task`, `remove_task`, `edit_task`). It retrieves tasks by walking `owner.get_pets()` → `pet.get_tasks()`, not from a flat internal list.
