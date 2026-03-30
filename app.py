@@ -62,10 +62,24 @@ with oc2:
     owner_email = st.text_input("Email", value="alex@pawpal.com")
 
 if st.button("Set Owner"):
-    st.session_state.owner = Owner(id=1, name=owner_name, email=owner_email)
-    for pet in st.session_state.pets.values():
-        st.session_state.owner.add_pet(pet)
-    st.success(f"Owner set: {owner_name} ({owner_email})")
+    normalized_owner_name = owner_name.strip().lower()
+    normalized_owner_email = owner_email.strip().lower()
+    existing_owner = st.session_state.owner
+
+    is_duplicate_owner = (
+        existing_owner is not None
+        and existing_owner.getName().strip().lower() == normalized_owner_name
+        and existing_owner.getEmail().strip().lower() == normalized_owner_email
+    )
+
+    if is_duplicate_owner:
+        st.warning("Duplicate owner detected with the same name and email.")
+        st.error("Owner failed: Duplicate owner information was found.")
+    else:
+        st.session_state.owner = Owner(id=1, name=owner_name, email=owner_email)
+        for pet in st.session_state.pets.values():
+            st.session_state.owner.add_pet(pet)
+        st.success(f"Owner set: {owner_name} ({owner_email})")
 
 if st.session_state.owner is None:
     st.info("Set an owner above to get started.")
@@ -96,18 +110,31 @@ with st.expander("Add a pet"):
         new_pet_age = st.number_input("Age (years)", min_value=0, max_value=30, value=3)
 
     if st.button("Add pet"):
-        pet_id = st.session_state.next_pet_id
-        new_pet = Pet(
-            id=pet_id,
-            name=new_pet_name,
-            species=new_pet_species,
-            age=int(new_pet_age),
-            owner_id=st.session_state.owner.getId(),
+        normalized_pet_name = new_pet_name.strip().lower()
+        duplicate_pet_exists = any(
+            pet.getName().strip().lower() == normalized_pet_name
+            and pet.getSpecies().strip().lower() == new_pet_species.strip().lower()
+            and pet.getAge() == int(new_pet_age)
+            and pet.getOwnerId() == st.session_state.owner.getId()
+            for pet in st.session_state.pets.values()
         )
-        st.session_state.pets[pet_id] = new_pet
-        st.session_state.owner.add_pet(new_pet)
-        st.session_state.next_pet_id += 1
-        st.rerun()
+
+        if duplicate_pet_exists:
+            st.warning("Duplicate pet detected with the same details.")
+            st.error("Pet failed: Duplicate pet information was found.")
+        else:
+            pet_id = st.session_state.next_pet_id
+            new_pet = Pet(
+                id=pet_id,
+                name=new_pet_name,
+                species=new_pet_species,
+                age=int(new_pet_age),
+                owner_id=st.session_state.owner.getId(),
+            )
+            st.session_state.pets[pet_id] = new_pet
+            st.session_state.owner.add_pet(new_pet)
+            st.session_state.next_pet_id += 1
+            st.rerun()
 
 st.divider()
 
@@ -128,7 +155,7 @@ else:
         duration = st.number_input("Duration (min)", min_value=1, max_value=240, value=30)
     with tc3:
         priority = st.selectbox("Priority", ["high", "medium", "low"])
-        frequency = st.selectbox("Frequency", ["once", "daily", "weekdays"])
+        frequency = st.selectbox("Frequency", ["once", "daily"])
         due_time_input = st.time_input(
             "Due time",
             value=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0).time(),
@@ -172,7 +199,6 @@ else:
             st.rerun()
 
 # Task list with mark-complete buttons
-st.session_state.scheduler.get_today_tasks(st.session_state.owner)
 all_tasks = [
     task
     for task in st.session_state.scheduler.get_all_tasks(st.session_state.owner)

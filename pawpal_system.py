@@ -125,20 +125,16 @@ class Scheduler:
         pet._tasks.append(task)
         self._pet_registry[pet.getId()] = pet
 
-    def _should_generate_for_day(self, template: Task, target_day: date) -> bool:
-        """Return whether a template should generate an instance on target day."""
-        if template.frequency == "daily":
-            return True
-        if template.frequency == "weekdays":
-            return target_day.weekday() < 5
-        return False
+    def _should_generate_for_day(self, template: Task) -> bool:
+        """Return whether a template should generate an instance."""
+        return template.frequency == "daily"
 
     def _spawn_recurring_tasks_for_date(self, owner: Owner, target_day: date) -> None:
         """Generate daily task instances from recurring templates."""
         for pet in owner.get_pets():
             templates = [task for task in pet.get_tasks() if task.is_template]
             for template in templates:
-                if not self._should_generate_for_day(template, target_day):
+                if not self._should_generate_for_day(template):
                     continue
 
                 already_generated = any(
@@ -228,12 +224,18 @@ class Scheduler:
     def get_today_tasks(self, owner: Owner) -> List[Task]:
         """Return incomplete tasks due today plus overdue tasks."""
         self._spawn_recurring_tasks_for_date(owner, date.today())
-        return [
-            t for t in self.get_all_tasks(owner)
-            if not t.is_template
-            and not t.is_completed
-            and t.due_time.date() <= date.today()
-        ]
+        seen: set = set()
+        result = []
+        for t in self.get_all_tasks(owner):
+            if (
+                not t.is_template
+                and not t.is_completed
+                and t.due_time.date() <= date.today()
+                and t.id not in seen
+            ):
+                seen.add(t.id)
+                result.append(t)
+        return result
 
     def generate_schedule(self, owner: Owner, available_mins: int) -> List[Task]:
         """Build a schedule that prioritizes overdue and high-priority tasks."""
