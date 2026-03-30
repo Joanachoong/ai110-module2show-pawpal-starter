@@ -10,6 +10,7 @@ class Owner:
     id: int
     name: str
     email: str
+    _pets: List[Pet] = field(default_factory=list)
 
     def getId(self) -> int:
         return self.id
@@ -20,6 +21,15 @@ class Owner:
     def getEmail(self) -> str:
         return self.email
 
+    def add_pet(self, pet: Pet) -> None:
+        self._pets.append(pet)
+
+    def get_pets(self) -> List[Pet]:
+        return list(self._pets)
+
+    def get_pet_ids(self) -> List[int]:
+        return [pet.getId() for pet in self._pets]
+
 
 @dataclass
 class Pet:
@@ -28,6 +38,7 @@ class Pet:
     species: str
     age: int
     owner_id: int
+    _tasks: List[Task] = field(default_factory=list)
 
     def getId(self) -> int:
         return self.id
@@ -44,6 +55,9 @@ class Pet:
     def getOwnerId(self) -> int:
         return self.owner_id
 
+    def get_tasks(self) -> List[Task]:
+        return list(self._tasks)
+
 
 @dataclass
 class Task:
@@ -56,6 +70,7 @@ class Task:
     owner_name: str = ""
     priority: str = "medium"   # "low" | "medium" | "high"
     owner_id: int = 0
+    pet_id: int = 0
     is_completed: bool = False
 
     def mark_complete(self) -> None:
@@ -67,18 +82,18 @@ class Task:
 
 class Scheduler:
     def __init__(self):
-        self._pets: List[Pet] = []
         self._tasks: List[Task] = []
         self._next_task_id: int = 1
+        self._pet_registry: dict = {}  # pet_id -> Pet, for internal lookup
 
-    def add_pet(self, pet: Pet) -> None:
-        self._pets.append(pet)
-
-    def add_task(self, task: Task, owner: Owner) -> None:
+    def add_task(self, task: Task, owner: Owner, pet: Pet) -> None:
         task.id = self._next_task_id
         self._next_task_id += 1
         task.owner_id = owner.getId()
+        task.pet_id = pet.getId()
         self._tasks.append(task)
+        pet._tasks.append(task)
+        self._pet_registry[pet.getId()] = pet
 
     def get_task(self, task_id: int) -> Optional[Task]:
         return next((t for t in self._tasks if t.id == task_id), None)
@@ -93,9 +108,14 @@ class Scheduler:
         return True
 
     def remove_task(self, task_id: int) -> bool:
-        before = len(self._tasks)
+        task = self.get_task(task_id)
+        if task is None:
+            return False
         self._tasks = [t for t in self._tasks if t.id != task_id]
-        return len(self._tasks) < before
+        pet = self._pet_registry.get(task.pet_id)
+        if pet is not None:
+            pet._tasks = [t for t in pet._tasks if t.id != task_id]
+        return True
 
     def schedule_walk(
         self,
@@ -115,15 +135,16 @@ class Scheduler:
             owner_name=owner.getName(),
             priority=priority,
         )
-        self.add_task(task, owner)
+        self.add_task(task, owner, pet)
         return task
+
+    def get_all_tasks(self, owner: Owner) -> List[Task]:
+        return [task for pet in owner.get_pets() for task in pet.get_tasks()]
 
     def get_today_tasks(self, owner: Owner) -> List[Task]:
         return [
-            t for t in self._tasks
-            if t.owner_id == owner.getId()
-            and t.is_today()
-            and not t.is_completed
+            t for t in self.get_all_tasks(owner)
+            if t.is_today() and not t.is_completed
         ]
 
     def generate_schedule(self, owner: Owner, available_mins: int) -> List[Task]:
@@ -136,9 +157,6 @@ class Scheduler:
                 scheduled.append(task)
                 remaining -= task.duration_mins
         return scheduled
-
-    def get_all_pets(self) -> List[Pet]:
-        return list(self._pets)
 
 
 class Dashboard:

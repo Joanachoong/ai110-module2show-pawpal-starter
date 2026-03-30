@@ -24,7 +24,7 @@ There are the **5 classes** in your UML class diagram:
 - Did your design change during implementation? Yes
 
 - If yes, describe at least one change and why you made it.
-Given that I merged schedule and scheduler into one class in the end given they share the same feature . Other than that, i removed the duplicate fucntion that was shown in both Owner and schedualer class.  
+Given that I merged schedule and scheduler into one class in the end given they share the same feature . Other than that, I removed the duplicate fucntion that was shown in both Owner and schedualer class.  
 
 ---
 
