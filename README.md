@@ -49,64 +49,75 @@ pip install -r requirements.txt
 classDiagram
 direction TB
 
-class Dashboard {
-	- session_state: dict
-	+ render_owner_details(owner: Owner): void
-	+ render_pet_details(pet: Pet): void
-	+ render_schedule_details(tasks: List~Task~): void
-	+ run(): void
-}
-
-class Scheduler {
-	- pets: List~Pet~
-	- tasks: List~Task~
-	+ add_pet(pet: Pet): void
-	+ add_task(task: Task, owner: Owner): void
-	+ schedule_walk(pet: Pet, owner: Owner, due_time: datetime, duration_mins: int): Task
-	+ get_today_tasks(owner: Owner): List~Task~
-	+ get_all_pets(): List~Pet~
-}
-
 class Owner {
-	- id: int
-	- name: string
-	- email: string
-	+ getId(): int
-	+ getName(): string
-	+ getEmail(): string
+    - id: int
+    - name: string
+    - email: string
+    + getId(): int
+    + getName(): string
+    + getEmail(): string
 }
 
 class Pet {
-	- id: int
-	- name: string
-	- species: string
-	- age: int
-	- owner_id: int
-	+ getId(): int
-	+ getName(): string
-	+ getSpecies(): string
-	+ getAge(): int
+    - id: int
+    - name: string
+    - species: string
+    - age: int
+    - owner_id: int
+    + getId(): int
+    + getName(): string
+    + getSpecies(): string
+    + getAge(): int
+    + getOwnerId(): int
 }
 
 class Task {
-	- id: int
-	- description: string
-	- task_type: string
-	- due_time: datetime
-	- duration_mins: int
-	- is_completed: bool
-	+ mark_complete(): void
-	+ is_today(): bool
+    - id: int
+    - description: string
+    - task_type: string
+    - due_time: datetime
+    - duration_mins: int
+    - pet_name: string
+    - owner_name: string
+    - priority: string ~~low / medium / high~~
+    - owner_id: int
+    - is_completed: bool
+    + mark_complete(): void
+    + is_today(): bool
 }
 
-Owner "1" o-- "0..*" Pet : owns
+class Scheduler {
+    - pets: List~Pet~
+    - tasks: List~Task~
+    - next_task_id: int
+    + add_pet(pet: Pet): void
+    + add_task(task: Task, owner: Owner): void
+    + get_task(task_id: int): Task
+    + edit_task(task_id: int, kwargs): bool
+    + remove_task(task_id: int): bool
+    + schedule_walk(pet, owner, due_time, duration_mins, priority): Task
+    + get_today_tasks(owner: Owner): List~Task~
+    + generate_schedule(owner: Owner, available_mins: int): List~Task~
+    + get_all_pets(): List~Pet~
+}
+
+class Dashboard {
+    - session_state: dict
+    + render_owner_details(owner: Owner): void
+    + render_pet_details(pet: Pet): void
+    + render_schedule_details(tasks: List~Task~): void
+    + run(): void
+}
+
+Owner "1" *-- "0..*" Pet : owns
 Scheduler "1" o-- "0..*" Pet : manages
 Scheduler "1" o-- "0..*" Task : manages
 
 Dashboard ..> Owner : displays details
 Dashboard ..> Pet : displays details
-Dashboard ..> Scheduler : requests today schedule
-Dashboard ..> Task : renders scheduled tasks
+Dashboard ..> Scheduler : requests schedule
+Dashboard ..> Task : renders tasks
+
 ```
 
 Notes:

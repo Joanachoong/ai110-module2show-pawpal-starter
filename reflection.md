@@ -10,7 +10,7 @@ My initial UML design separated planning data from planning logic. I created bot
 
 - What classes did you include, and what responsibilities did you assign to each?
 
-OHere are the **5 classes** in your UML class diagram:
+There are the **5 classes** in your UML class diagram:
 
 1. **Dashboard** — display all the information 
 2. **Scheduler** — applies rules and constraints to choose and order tasks.
