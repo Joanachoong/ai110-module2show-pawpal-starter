@@ -50,79 +50,94 @@ classDiagram
 direction TB
 
 class Owner {
-    - id: int
-    - name: string
-    - email: string
-    - _pets: List~Pet~
-    + getId(): int
-    + getName(): string
-    + getEmail(): string
-    + add_pet(pet: Pet): void
-    + get_pets(): List~Pet~
-    + get_pet_ids(): List~int~
+	+id: int
+	+name: str
+	+email: str
+	-_pets: List<Pet>
+	+getId(): int
+	+getName(): str
+	+getEmail(): str
+	+add_pet(pet: Pet): None
+	+get_pets(): List<Pet>
+	+get_pet_ids(): List<int>
 }
 
 class Pet {
-    - id: int
-    - name: string
-    - species: string
-    - age: int
-    - owner_id: int
-    - _tasks: List~Task~
-    + getId(): int
-    + getName(): string
-    + getSpecies(): string
-    + getAge(): int
-    + getOwnerId(): int
-    + get_tasks(): List~Task~
+	+id: int
+	+name: str
+	+species: str
+	+age: int
+	+owner_id: int
+	-_tasks: List<Task>
+	+getId(): int
+	+getName(): str
+	+getSpecies(): str
+	+getAge(): int
+	+getOwnerId(): int
+	+get_tasks(): List<Task>
 }
 
 class Task {
-    - id: int
-    - description: string
-    - task_type: string
-    - due_time: datetime
-    - duration_mins: int
-    - pet_name: string
-    - owner_name: string
-    - priority: string ~~low / medium / high~~
-    - owner_id: int
-    - pet_id: int
-    - is_completed: bool
-    + mark_complete(): void
-    + is_today(): bool
+	+id: int
+	+description: str
+	+task_type: str
+	+due_time: datetime
+	+duration_mins: int
+	+pet_name: str
+	+owner_name: str
+	+priority: str
+	+owner_id: int
+	+pet_id: int
+	+is_completed: bool
+	+frequency: str
+	+is_template: bool
+	+parent_task_id: int
+	+generated_for: date?
+	+mark_complete(): None
+	+is_today(): bool
+	+is_overdue(): bool
 }
 
 class Scheduler {
-    - _tasks: List~Task~
-    - _next_task_id: int
-    - _pet_registry: dict
-    + add_task(task: Task, owner: Owner, pet: Pet): void
-    + get_task(task_id: int): Task
-    + edit_task(task_id: int, kwargs): bool
-    + remove_task(task_id: int): bool
-    + schedule_walk(pet, owner, due_time, duration_mins, priority): Task
-    + get_all_tasks(owner: Owner): List~Task~
-    + get_today_tasks(owner: Owner): List~Task~
-    + generate_schedule(owner: Owner, available_mins: int): List~Task~
+	-_tasks: List<Task>
+	-_next_task_id: int
+	-_pet_registry: dict<int, Pet>
+	+add_task(task: Task, owner: Owner, pet: Pet): None
+	+get_task(task_id: int): Task?
+	+complete_task(task_id: int, owner: Owner): None
+	+undo_complete_task(task_id: int): None
+	+edit_task(task_id: int, **kwargs): bool
+	+remove_task(task_id: int): bool
+	+schedule_walk(pet: Pet, owner: Owner, due_time: datetime, duration_mins: int, priority: str="medium"): Task
+	+get_all_tasks(owner: Owner): List<Task>
+	+filter_tasks(owner: Owner, due_date: date, is_completed: bool?=None, pet_name: str?=None): List<Task>
+	+get_today_tasks(owner: Owner): List<Task>
+	+generate_schedule(owner: Owner, available_mins: int): List<Task>
+	-_is_duplicate_task_for_pet(task: Task, pet: Pet): bool
+	-_should_generate_for_day(template: Task, target_day: date): bool
+	-_spawn_instance_from_template(template: Task, owner: Owner, target_day: date): None
+	-_spawn_recurring_tasks_for_date(owner: Owner, target_day: date): None
+	{static} -_next_weekday(from_day: date): date
 }
 
 class Dashboard {
-    - session_state: dict
-    + render_owner_details(owner: Owner): void
-    + render_pet_details(pet: Pet): void
-    + render_schedule_details(tasks: List~Task~): void
-    + run(): void
+	-_session_state: dict
+	+render_owner_details(owner: Owner): None
+	+render_pet_details(pet: Pet): None
+	+render_schedule_details(tasks: List<Task>): None
+	+run(): None
 }
 
-Owner "1" *--> "0..*" Pet : owns
-Pet "1" *--> "0..*" Task : associated with
+Owner "1" -- "0.." Pet : owns
+Pet "1" -- "0.." Task : has tasks
 Scheduler "1" o-- "0..*" Task : manages
-
-Dashboard ..> Owner : displays details
-Dashboard ..> Pet : displays details
-Dashboard ..> Scheduler : requests schedule
-Dashboard ..> Task : renders tasks
+Scheduler ..> Owner : uses
+Scheduler ..> Pet : uses
+Scheduler ..> Task : creates/updates
+Dashboard ..> Scheduler : pulls today tasks
+Dashboard ..> Owner : renders owner info
+Dashboard ..> Pet : renders pet info
+Dashboard ..> Task : renders list
 
 ```
 
