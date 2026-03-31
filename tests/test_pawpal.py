@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from datetime import datetime
+from datetime import datetime, date
 import pytest
 from pawpal_system import Owner, Pet, Task, Scheduler
 
@@ -120,3 +120,85 @@ def test_schedule_still_returns_today_tasks_after_duplicate_failure():
     assert len(today_schedule) == 1
     assert today_schedule[0].description == "Morning walk around the block"
     assert today_schedule[0].due_time.date() == datetime.today().date()
+
+
+# --- filter_tasks test helpers ---
+
+def make_filter_setup():
+    """Create owner, two pets (Buddy, Luna), and three tasks for filter tests."""
+    owner = Owner(id=1, name="Alex", email="alex@pawpal.com")
+    buddy = Pet(id=1, name="Buddy", species="Dog", age=3, owner_id=owner.getId())
+    luna = Pet(id=2, name="Luna", species="Cat", age=2, owner_id=owner.getId())
+    owner.add_pet(buddy)
+    owner.add_pet(luna)
+    scheduler = Scheduler()
+
+    today = datetime.today().replace(hour=10, minute=0, second=0, microsecond=0)
+
+    task_buddy_incomplete = Task(
+        id=0, description="Walk Buddy", task_type="walk",
+        due_time=today, duration_mins=20,
+        pet_name="Buddy", owner_name="Alex",
+    )
+    task_buddy_complete = Task(
+        id=0, description="Feed Buddy", task_type="feeding",
+        due_time=today, duration_mins=10,
+        pet_name="Buddy", owner_name="Alex",
+    )
+    task_luna_incomplete = Task(
+        id=0, description="Play with Luna", task_type="play",
+        due_time=today, duration_mins=15,
+        pet_name="Luna", owner_name="Alex",
+    )
+
+    scheduler.add_task(task_buddy_incomplete, owner, buddy)
+    scheduler.add_task(task_buddy_complete, owner, buddy)
+    scheduler.add_task(task_luna_incomplete, owner, luna)
+
+    task_buddy_complete.mark_complete()
+
+    return scheduler, owner, today.date()
+
+
+# --- filter_tasks tests ---
+
+def test_filter_tasks_by_completion_true():
+    scheduler, owner, today = make_filter_setup()
+    result = scheduler.filter_tasks(owner, today, is_completed=True)
+    assert len(result) == 1
+    assert result[0].description == "Feed Buddy"
+
+
+def test_filter_tasks_by_completion_false():
+    scheduler, owner, today = make_filter_setup()
+    result = scheduler.filter_tasks(owner, today, is_completed=False)
+    assert len(result) == 2
+    descriptions = {t.description for t in result}
+    assert descriptions == {"Walk Buddy", "Play with Luna"}
+
+
+def test_filter_tasks_by_pet_name():
+    scheduler, owner, today = make_filter_setup()
+    result = scheduler.filter_tasks(owner, today, pet_name="Buddy")
+    assert len(result) == 2
+    assert all(t.pet_name == "Buddy" for t in result)
+
+
+def test_filter_tasks_by_pet_name_case_insensitive():
+    scheduler, owner, today = make_filter_setup()
+    result = scheduler.filter_tasks(owner, today, pet_name="buddy")
+    assert len(result) == 2
+    assert all(t.pet_name == "Buddy" for t in result)
+
+
+def test_filter_tasks_by_both_completion_and_pet_name():
+    scheduler, owner, today = make_filter_setup()
+    result = scheduler.filter_tasks(owner, today, is_completed=False, pet_name="Buddy")
+    assert len(result) == 1
+    assert result[0].description == "Walk Buddy"
+
+
+def test_filter_tasks_due_date_only():
+    scheduler, owner, today = make_filter_setup()
+    result = scheduler.filter_tasks(owner, today)
+    assert len(result) == 3

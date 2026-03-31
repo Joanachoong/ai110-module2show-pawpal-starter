@@ -247,6 +247,22 @@ class Scheduler:
         """Return all tasks across the owner's pets."""
         return [task for pet in owner.get_pets() for task in pet.get_tasks()]
 
+    def filter_tasks(
+        self,
+        owner: Owner,
+        due_date: date,
+        is_completed: Optional[bool] = None,
+        pet_name: Optional[str] = None,
+    ) -> List[Task]:
+        """Return tasks for the owner filtered by due date, with optional filters for completion status and pet name."""
+        tasks = self.get_all_tasks(owner)
+        tasks = [t for t in tasks if t.due_time.date() == due_date]
+        if is_completed is not None:
+            tasks = [t for t in tasks if t.is_completed == is_completed]
+        if pet_name is not None:
+            tasks = [t for t in tasks if t.pet_name.lower() == pet_name.lower()]
+        return tasks
+
     def get_today_tasks(self, owner: Owner) -> List[Task]:
         """Return incomplete tasks due today plus overdue tasks."""
         self._spawn_recurring_tasks_for_date(owner, date.today())
