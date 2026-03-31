@@ -41,9 +41,10 @@ I proritized due date as the first filter because this user will be more avware 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
-Spawn multple task once today task is label as complete . Other thing is when the task is undo , it does not remove prespawned task, which cause multiple task prespawned task in the task section
+Date is not given in the task, when user select task as daily or weekly , it does not show the date of the task
 
 - Why is that tradeoff reasonable for this scenario?
+Given that user prorities is to know what is today task , date is a redundant value
 
 ---
 

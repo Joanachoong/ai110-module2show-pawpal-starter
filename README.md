@@ -131,3 +131,36 @@ Notes:
 - **Pet** passively holds its associated tasks (`_tasks`); tasks are added/removed only by Scheduler.
 - **Task** now carries a `pet_id` field so Scheduler can sync removals back to the correct Pet.
 - **Scheduler** is the sole authority for task mutation (`add_task`, `remove_task`, `edit_task`). It retrieves tasks by walking `owner.get_pets()` → `pet.get_tasks()`, not from a flat internal list.
+
+
+### Smarter Scheduling
+
+
+The scheduling system now goes beyond a simple task list and actively manages daily planning, recurring care routines. It automatically creates today’s recurring tasks, prioritizes what matters most, and builds a realistic plan based on available time.
+
+
+1. Recurring task templates
+
+Supports daily and weekday-based weekly recurrences.
+Generates concrete task instances from templates instead of reusing the template itself.
+Prevents duplicate generated instances for the same template/day pair.
+
+2. Automatic “today” task preparation
+
+When loading today’s tasks, recurring items due today are generated first.
+The list includes actionable tasks due today and overdue tasks.
+Completed tasks and template-only records are excluded from the actionable view.
+
+3. Smarter prioritization logic
+
+Scheduling ranks tasks in this order:
+Overdue tasks first
+Completion status 
+Pet name
+This flow ensure pet owner's know what task needs to be resolve first and which pet's task is incomplete if owner have multiple pet in the house.
+
+4. Completion-aware recurrence flow
+
+Completing a recurring instance pre-spawns the next expected occurrence.
+Undoing completion reverses that change and removes the pre-spawned future instance (if still incomplete).
+Keeps recurring plans consistent with user actions.
