@@ -13,41 +13,23 @@ def _date_label(due: datetime) -> str:
         return f"Tomorrow {due.strftime('%I:%M %p')}"
     return due.strftime('%a %b %d, %I:%M %p')
 
+
+def _find_conflicts(tasks):
+    """Return pairs of tasks whose time windows overlap."""
+    conflicts = []
+    sorted_t = sorted(tasks, key=lambda t: t.due_time)
+    for i in range(len(sorted_t) - 1):
+        a, b = sorted_t[i], sorted_t[i + 1]
+        a_end = a.due_time + timedelta(minutes=a.duration_mins)
+        if b.due_time < a_end:
+            conflicts.append((a, b))
+    return conflicts
+
+
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
 st.title("🐾 PawPal+")
-
-st.markdown(
-    """
-Welcome to the PawPal+ starter app.
-
-This file is intentionally thin. It gives you a working Streamlit app so you can start quickly,
-but **it does not implement the project logic**. Your job is to design the system and build it.
-
-Use this app as your interactive demo once your backend classes/functions exist.
-"""
-)
-
-with st.expander("Scenario", expanded=True):
-    st.markdown(
-        """
-**PawPal+** is a pet care planning assistant. It helps a pet owner plan care tasks
-for their pet(s) based on constraints like time, priority, and preferences.
-
-You will design and implement the scheduling logic and connect it to this Streamlit UI.
-"""
-    )
-
-with st.expander("What you need to build", expanded=True):
-    st.markdown(
-        """
-At minimum, your system should:
-- Represent pet care tasks (what needs to happen, how long it takes, priority)
-- Represent the pet and the owner (basic info and preferences)
-- Build a plan/schedule for a day that chooses and orders tasks based on constraints
-- Explain the plan (why each task was chosen and when it happens)
-"""
-    )
+st.caption("Pet care planning assistant — schedule, prioritize, and track your pet tasks.")
 
 st.divider()
 
@@ -101,16 +83,21 @@ if st.session_state.owner is None:
 
 st.divider()
 
-# ── Pets ──────────────────────────────────────────────────────
+# ── Pets ──────────────────────────────────────────────────────────────────────
 st.subheader("Pets")
 
 if st.session_state.pets:
-    for pet in st.session_state.pets.values():
-        task_count = len(pet.get_tasks())
-        st.write(
-            f"- **{pet.getName()}** — {pet.getSpecies()}, age {pet.getAge()} "
-            f"| {task_count} task(s)"
-        )
+    st.table(
+        [
+            {
+                "Name": pet.getName(),
+                "Species": pet.getSpecies(),
+                "Age (yrs)": pet.getAge(),
+                "Tasks": len(pet.get_tasks()),
+            }
+            for pet in st.session_state.pets.values()
+        ]
+    )
 else:
     st.info("No pets yet. Add one below.")
 
@@ -149,6 +136,40 @@ with st.expander("Add a pet"):
             st.session_state.owner.add_pet(new_pet)
             st.session_state.next_pet_id += 1
             st.rerun()
+
+st.divider()
+
+# ── Today's Overview ───────────────────────────────────────────────────────────
+st.subheader("Today's Overview")
+
+owner = st.session_state.owner
+scheduler = st.session_state.scheduler
+
+today_tasks = scheduler.get_today_tasks(owner)
+overdue_tasks = [t for t in today_tasks if t.is_overdue()]
+all_owner_tasks = scheduler.get_all_tasks(owner)
+completed_today = [
+    t for t in all_owner_tasks
+    if t.is_completed and not t.is_template and t.is_today()
+]
+
+m1, m2, m3 = st.columns(3)
+m1.metric("Due Today", len(today_tasks))
+m2.metric("Overdue", len(overdue_tasks))
+m3.metric("Completed Today", len(completed_today))
+
+if overdue_tasks:
+    priority_badge = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+    for task in sorted(overdue_tasks, key=lambda t: t.due_time):
+        badge = priority_badge.get(task.priority, "")
+        st.warning(
+            f"⚠️ Overdue: {badge} **{task.task_type.capitalize()}** — {task.description} "
+            f"| {task.pet_name} | {_date_label(task.due_time)} | {task.duration_mins} min"
+        )
+elif today_tasks:
+    st.success("No overdue tasks — you're on track!")
+else:
+    st.info("No tasks due today. Add tasks below to get started.")
 
 st.divider()
 
@@ -196,7 +217,7 @@ else:
             and task.due_time == due_dt
             and task.is_template == is_template_task
             and (not is_template_task or task.frequency == frequency)
-            for task in st.session_state.scheduler.get_all_tasks(st.session_state.owner)
+            for task in scheduler.get_all_tasks(owner)
         )
 
         if duplicate_exists:
@@ -209,27 +230,36 @@ else:
                 due_time=due_dt,
                 duration_mins=int(duration),
                 pet_name=selected_pet.getName(),
-                owner_name=st.session_state.owner.getName(),
+                owner_name=owner.getName(),
                 priority=priority,
                 frequency=frequency,
                 is_template=is_template_task,
             )
             try:
-                st.session_state.scheduler.add_task(new_task, st.session_state.owner, selected_pet)
+                scheduler.add_task(new_task, owner, selected_pet)
                 st.rerun()
             except ValueError:
                 st.warning("Task not added: A duplicate task for this pet already exists.")
 
-# ── Task library (manage definitions only — no mark-complete here) ─────────────
+# ── Task library ───────────────────────────────────────────────────────────────
 all_library_tasks = sorted(
-    [t for t in st.session_state.scheduler.get_all_tasks(st.session_state.owner)
+    [t for t in scheduler.get_all_tasks(owner)
      if t.is_template or (t.frequency == "once" and t.parent_task_id == 0)],
     key=lambda t: (t.due_time.time(), t.pet_name),
 )
+
 if all_library_tasks:
-    st.write("**Task library:**")
     freq_icon = {"once": "1️⃣", "daily": "🔁", "weekly": "📅"}
     priority_badge = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+
+    st.write("**Task library:**")
+    # Header row
+    hc1, hc2 = st.columns([6, 1])
+    with hc1:
+        st.caption("Freq · Priority · Type — Description | Pet | Time | Duration")
+    with hc2:
+        st.caption("Action")
+
     for task in all_library_tasks:
         badge = priority_badge.get(task.priority, "")
         ficon = freq_icon.get(task.frequency, "")
@@ -241,7 +271,7 @@ if all_library_tasks:
             )
         with col_remove:
             if st.button("Remove", key=f"remove_{task.id}"):
-                st.session_state.scheduler.remove_task(task.id)
+                scheduler.remove_task(task.id)
                 st.rerun()
 else:
     st.info("No tasks yet. Add one above.")
@@ -256,12 +286,32 @@ available_mins = st.number_input(
 )
 
 if st.button("Generate schedule"):
-    st.session_state.scheduled_tasks = st.session_state.scheduler.generate_schedule(
-        st.session_state.owner,
+    st.session_state.scheduled_tasks = scheduler.generate_schedule(
+        owner,
         available_mins=int(available_mins),
     )
 
 if st.session_state.scheduled_tasks is not None:
+    scheduled = st.session_state.scheduled_tasks
+
+    # ── Conflict warnings ──────────────────────────────────────────────────────
+    conflicts = _find_conflicts(scheduled)
+    if conflicts:
+        for a, b in conflicts:
+            st.warning(
+                f"⚠️ Conflict: **{a.description}** overlaps with **{b.description}** "
+                f"({a.due_time.strftime('%I:%M %p')} + {a.duration_mins} min vs {b.due_time.strftime('%I:%M %p')})"
+            )
+
+    # ── Summary metrics ────────────────────────────────────────────────────────
+    total_mins_used = sum(t.duration_mins for t in scheduled)
+    done_count = sum(1 for t in scheduled if t.is_completed)
+    sm1, sm2, sm3 = st.columns(3)
+    sm1.metric("Tasks Scheduled", len(scheduled))
+    sm2.metric("Time Used", f"{total_mins_used} min")
+    sm3.metric("Completed", done_count)
+
+    # ── Filters ────────────────────────────────────────────────────────────────
     st.write("**Filter schedule:**")
     fc1, fc2 = st.columns(2)
     with fc1:
@@ -271,40 +321,60 @@ if st.session_state.scheduled_tasks is not None:
             key="sched_completion_filter",
         )
     with fc2:
-        pet_options = ["All"] + sorted({t.pet_name for t in st.session_state.scheduled_tasks if t.pet_name})
+        pet_options = ["All"] + sorted({t.pet_name for t in scheduled if t.pet_name})
         pet_filter = st.selectbox(
             "By pet name",
             pet_options,
             key="sched_pet_filter",
         )
 
-    tasks_to_show = st.session_state.scheduled_tasks
-    if completion_filter == "Completed":
-        tasks_to_show = [t for t in tasks_to_show if t.is_completed]
-    elif completion_filter == "Incomplete":
-        tasks_to_show = [t for t in tasks_to_show if not t.is_completed]
-    if pet_filter != "All":
-        tasks_to_show = [t for t in tasks_to_show if t.pet_name.lower() == pet_filter.lower()]
+    # Use filter_tasks for date+completion+pet filtering when possible,
+    # then intersect with scheduled task IDs to stay within the generated schedule.
+    scheduled_ids = {t.id for t in scheduled}
 
+    is_completed_filter = None
+    if completion_filter == "Completed":
+        is_completed_filter = True
+    elif completion_filter == "Incomplete":
+        is_completed_filter = False
+
+    pet_name_filter = None if pet_filter == "All" else pet_filter
+
+    filtered = scheduler.filter_tasks(
+        owner,
+        due_date=date.today(),
+        is_completed=is_completed_filter,
+        pet_name=pet_name_filter,
+    )
+    # Keep only tasks that are in the current schedule
+    filtered_ids = {t.id for t in filtered}
+    tasks_to_show = [t for t in scheduled if t.id in filtered_ids]
+
+    # ── Schedule rows ──────────────────────────────────────────────────────────
     st.subheader("Today's Schedule")
     if not tasks_to_show:
         st.info("No tasks match the current filters.")
     else:
         priority_badge = {"high": "🔴", "medium": "🟡", "low": "🟢"}
         for task in sorted(tasks_to_show, key=lambda t: t.due_time):
-            status = "✅" if task.is_completed else "🕐"
             badge = priority_badge.get(task.priority, "")
+            row_text = (
+                f"**{task.task_type.capitalize()}** — {task.description} "
+                f"| {task.pet_name} | {_date_label(task.due_time)} | {task.duration_mins} min {badge}"
+            )
             col_info, col_btn = st.columns([6, 1])
             with col_info:
-                st.write(
-                    f"{status} {badge} **{task.task_type.capitalize()}** — {task.description} "
-                    f"| {task.pet_name} | {_date_label(task.due_time)} | {task.duration_mins} min"
-                )
+                if task.is_completed:
+                    st.success(f"✅ {row_text}")
+                elif task.is_overdue():
+                    st.error(f"🔴 Overdue: {row_text}")
+                else:
+                    st.write(f"🕐 {row_text}")
             with col_btn:
                 label = "Undo" if task.is_completed else "Done"
                 if st.button(label, key=f"sched_toggle_{task.id}"):
                     if task.is_completed:
-                        st.session_state.scheduler.undo_complete_task(task.id)
+                        scheduler.undo_complete_task(task.id)
                     else:
-                        st.session_state.scheduler.complete_task(task.id, st.session_state.owner)
+                        scheduler.complete_task(task.id, owner)
                     st.rerun()
