@@ -22,8 +22,6 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
-## Getting started
-
 ### Setup
 
 ```bash
@@ -41,6 +39,21 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+### Features
+
+- Deterministic schedule sorting: ranks tasks by overdue status first, then priority (high to medium to low), then earlier due time, then shorter duration.
+- Time-budgeted scheduling: uses a greedy selection pass to add ranked tasks only while total duration stays within available minutes.
+- Duplicate task conflict warnings: prevents adding duplicate tasks for the same pet and raises a clear error when a conflict is detected.
+- Daily recurrence generation: creates today’s instance from daily templates automatically when fetching today’s tasks.
+- Weekly weekday recurrence: generates weekly recurring tasks on business days (Mon-Fri), skipping weekends.
+- Idempotent recurrence spawning: avoids creating duplicate generated instances for the same template and day.
+- Complete-to-pre-spawn flow: when a recurring instance is completed, the next occurrence is automatically pre-generated.
+- Undo completion rollback: un-completing a recurring task removes its pre-generated next occurrence if it is still incomplete.
+- Template-child linkage: recurring instances track their parent template for traceability and lifecycle management.
+- Cascading delete for recurring series: removing a template recursively removes all generated child tasks.
+- Multi-filter task queries: supports filtering by due date, completion status, and pet name (case-insensitive).
+- Today view dedup + actionability filter: returns only unique, actionable tasks due today or earlier (excludes templates and completed tasks).
 
 
 ### UML Diagram (Refined)
@@ -200,3 +213,10 @@ Confirms daily recurring behavior by ensuring completing a generated daily task 
 
 5. Query/filter and empty-state reliability  
 Covers task filtering by date, completion status, and pet name (including case-insensitive matching), plus edge behavior when a pet has no tasks.
+
+### Demo
+
+![Pet Paw Demo 1](pet_paw_img1.png)
+
+![Pet Paw Demo 2](pet_paw_img2.png)
+
