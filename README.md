@@ -130,7 +130,7 @@ class Scheduler {
 	-_should_generate_for_day(template: Task, target_day: date): bool
 	-_spawn_instance_from_template(template: Task, owner: Owner, target_day: date): None
 	-_spawn_recurring_tasks_for_date(owner: Owner, target_day: date): None
-	{static} -_next_weekday(from_day: date): date
+    -_next_weekday(from_day: date): date
 }
 
 class Dashboard {
