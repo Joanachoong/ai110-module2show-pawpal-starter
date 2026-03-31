@@ -1,6 +1,17 @@
 import streamlit as st
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pawpal_system import Owner, Pet, Task, Scheduler, Dashboard
+
+
+def _date_label(due: datetime) -> str:
+    """Return a human-readable date label for a task's due time."""
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    if due.date() == today:
+        return f"Today {due.strftime('%I:%M %p')}"
+    if due.date() == tomorrow:
+        return f"Tomorrow {due.strftime('%I:%M %p')}"
+    return due.strftime('%a %b %d, %I:%M %p')
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -90,7 +101,7 @@ if st.session_state.owner is None:
 
 st.divider()
 
-# ── Pets ───────────────────────────────────────────────────────────────────────
+# ── Pets ──────────────────────────────────────────────────────
 st.subheader("Pets")
 
 if st.session_state.pets:
@@ -158,7 +169,13 @@ else:
         duration = st.number_input("Duration (min)", min_value=1, max_value=240, value=30)
     with tc3:
         priority = st.selectbox("Priority", ["high", "medium", "low"])
-        frequency = st.selectbox("Frequency", ["once", "daily"])
+        frequency = st.selectbox("Frequency", ["once", "daily", "weekly"])
+        freq_hints = {
+            "once": "Due: Today",
+            "daily": "Repeats every day",
+            "weekly": "Repeats Mon – Fri",
+        }
+        st.caption(freq_hints[frequency])
         due_time_input = st.time_input(
             "Due time",
             value=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0).time(),
@@ -219,7 +236,7 @@ if all_tasks:
         with col_info:
             st.write(
                 f"{status} {badge} **{task.task_type.capitalize()}** — {task.description} "
-                f"| {task.pet_name} | {task.due_time.strftime('%I:%M %p')} | {task.duration_mins} min"
+                f"| {task.pet_name} | {_date_label(task.due_time)} | {task.duration_mins} min"
             )
         with col_btn:
             label = "Undo" if task.is_completed else "Done"
@@ -227,7 +244,7 @@ if all_tasks:
                 if task.is_completed:
                     task.is_completed = False
                 else:
-                    task.mark_complete()
+                    st.session_state.scheduler.complete_task(task.id, st.session_state.owner)
                 st.rerun()
         with col_remove:
             if st.button("Remove", key=f"remove_{task.id}"):

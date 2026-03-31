@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Optional
 import streamlit as st
 
@@ -90,7 +90,7 @@ class Task:
     owner_id: int = 0
     pet_id: int = 0
     is_completed: bool = False
-    frequency: str = "once"  # "once" | "daily" | "weekdays"
+    frequency: str = "once"  # "once" | "daily" | "weekly"
     is_template: bool = False
     parent_task_id: int = 0
     generated_for: Optional[date] = None
@@ -151,46 +151,87 @@ class Scheduler:
         pet._tasks.append(task)
         self._pet_registry[pet.getId()] = pet
 
-    def _should_generate_for_day(self, template: Task) -> bool:
-        """Return whether a template should generate an instance."""
-        return template.frequency == "daily"
+    def _should_generate_for_day(self, template: Task, target_day: date) -> bool:
+        """Return whether a template should generate an instance for the given day.
+
+        - daily: every day
+        - weekly: every weekday (Mon–Fri); skips Saturday and Sunday
+        """
+        if template.frequency == "daily":
+            return True
+        if template.frequency == "weekly":
+            return target_day.weekday() < 5  # Mon=0 … Fri=4
+        return False
+
+    @staticmethod
+    def _next_weekday(from_day: date) -> date:
+        """Return the next weekday (Mon–Fri) strictly after from_day."""
+        next_day = from_day + timedelta(days=1)
+        while next_day.weekday() >= 5:  # skip Sat=5, Sun=6
+            next_day += timedelta(days=1)
+        return next_day
+
+    def _spawn_instance_from_template(self, template: Task, owner: Owner, target_day: date) -> None:
+        """Spawn a single instance from a template for the given day, if not already generated."""
+        pet = self._pet_registry.get(template.pet_id)
+        if pet is None:
+            return
+        already_generated = any(
+            t.parent_task_id == template.id and t.generated_for == target_day
+            for t in pet.get_tasks()
+        )
+        if already_generated:
+            return
+        due_dt = datetime.combine(target_day, template.due_time.time())
+        generated_task = Task(
+            id=0,
+            description=template.description,
+            task_type=template.task_type,
+            due_time=due_dt,
+            duration_mins=template.duration_mins,
+            pet_name=template.pet_name,
+            owner_name=template.owner_name,
+            priority=template.priority,
+            frequency="once",
+            is_template=False,
+            parent_task_id=template.id,
+            generated_for=target_day,
+        )
+        self.add_task(generated_task, owner, pet)
 
     def _spawn_recurring_tasks_for_date(self, owner: Owner, target_day: date) -> None:
-        """Generate daily task instances from recurring templates."""
+        """Generate task instances from recurring templates for the given day."""
         for pet in owner.get_pets():
-            templates = [task for task in pet.get_tasks() if task.is_template]
-            for template in templates:
-                if not self._should_generate_for_day(template):
-                    continue
-
-                already_generated = any(
-                    task.parent_task_id == template.id
-                    and task.generated_for == target_day
-                    for task in pet.get_tasks()
-                )
-                if already_generated:
-                    continue
-
-                due_dt = datetime.combine(target_day, template.due_time.time())
-                generated_task = Task(
-                    id=0,
-                    description=template.description,
-                    task_type=template.task_type,
-                    due_time=due_dt,
-                    duration_mins=template.duration_mins,
-                    pet_name=template.pet_name,
-                    owner_name=template.owner_name,
-                    priority=template.priority,
-                    frequency="once",
-                    is_template=False,
-                    parent_task_id=template.id,
-                    generated_for=target_day,
-                )
-                self.add_task(generated_task, owner, pet)
+            for template in [t for t in pet.get_tasks() if t.is_template]:
+                if self._should_generate_for_day(template, target_day):
+                    self._spawn_instance_from_template(template, owner, target_day)
 
     def get_task(self, task_id: int) -> Optional[Task]:
         """Return the task with the given ID, if found."""
         return next((t for t in self._tasks if t.id == task_id), None)
+
+    def complete_task(self, task_id: int, owner: Owner) -> None:
+        """Mark a task complete and spawn the next occurrence for recurring tasks."""
+        task = self.get_task(task_id)
+        if task is None:
+            return
+        task.mark_complete()
+
+        frequency = task.frequency
+        template = None
+        if task.parent_task_id > 0:
+            template = self.get_task(task.parent_task_id)
+            if template is not None:
+                frequency = template.frequency
+
+        if frequency == "daily":
+            # Always anchor to today so an overdue task doesn't skip days
+            next_day = date.today() + timedelta(days=1)
+            self._spawn_recurring_tasks_for_date(owner, next_day)
+        elif frequency == "weekly" and template is not None:
+            # Next weekday (Mon–Fri) after today
+            next_day = self._next_weekday(date.today())
+            self._spawn_instance_from_template(template, owner, next_day)
 
     def edit_task(self, task_id: int, **kwargs) -> bool:
         """Update editable task fields by task ID."""
