@@ -164,3 +164,24 @@ This flow ensure pet owner's know what task needs to be resolve first and which 
 Completing a recurring instance pre-spawns the next expected occurrence.
 Undoing completion reverses that change and removes the pre-spawned future instance (if still incomplete).
 Keeps recurring plans consistent with user actions.
+
+### Testing PawPal+ 
+
+To run the test case: `python -m pytest`
+
+Confidence lebel : 4/5
+
+1. Basic task lifecycle behavior  
+Verifies core functionality like marking a task complete and successfully adding tasks to a pet.
+
+2. Conflict and duplicate detection  
+Checks that true duplicates are rejected, including normalized descriptions (case/whitespace), while valid non-duplicates are accepted.
+
+3. Sorting correctness for scheduling  
+Validates that schedule output follows expected ordering rules, including overdue precedence and tie-breaking for same-time tasks.
+
+4. Recurrence logic on completion  
+Confirms daily recurring behavior by ensuring completing a generated daily task creates the next day’s task exactly once.
+
+5. Query/filter and empty-state reliability  
+Covers task filtering by date, completion status, and pet name (including case-insensitive matching), plus edge behavior when a pet has no tasks.

@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pytest
 from pawpal_system import Owner, Pet, Task, Scheduler
 
@@ -202,3 +202,229 @@ def test_filter_tasks_due_date_only():
     scheduler, owner, today = make_filter_setup()
     result = scheduler.filter_tasks(owner, today)
     assert len(result) == 3
+
+
+# --- scheduler behavior tests: sorting, recurrence, conflict detection ---
+
+def make_owner_pet_scheduler():
+    owner = Owner(id=1, name="Alex", email="alex@pawpal.com")
+    pet = Pet(id=1, name="Buddy", species="Dog", age=3, owner_id=owner.getId())
+    owner.add_pet(pet)
+    scheduler = Scheduler()
+    return owner, pet, scheduler
+
+
+def test_pet_with_no_tasks_returns_empty_today_and_schedule():
+    owner, pet, scheduler = make_owner_pet_scheduler()
+
+    assert pet.get_tasks() == []
+    assert scheduler.get_today_tasks(owner) == []
+    assert scheduler.generate_schedule(owner, available_mins=60) == []
+
+
+def test_generate_schedule_orders_by_due_time_then_duration_for_same_priority():
+    owner, pet, scheduler = make_owner_pet_scheduler()
+    now = datetime.now().replace(second=0, microsecond=0)
+    same_time = now + timedelta(hours=2)
+
+    task_earlier = Task(
+        id=0,
+        description="Earliest in time",
+        task_type="walk",
+        due_time=now + timedelta(hours=1),
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="medium",
+    )
+    task_same_time_longer = Task(
+        id=0,
+        description="Same time longer",
+        task_type="feeding",
+        due_time=same_time,
+        duration_mins=30,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="medium",
+    )
+    task_same_time_shorter = Task(
+        id=0,
+        description="Same time shorter",
+        task_type="play",
+        due_time=same_time,
+        duration_mins=10,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="medium",
+    )
+
+    scheduler.add_task(task_earlier, owner, pet)
+    scheduler.add_task(task_same_time_longer, owner, pet)
+    scheduler.add_task(task_same_time_shorter, owner, pet)
+
+    ordered = scheduler.generate_schedule(owner, available_mins=120)
+    descriptions = [t.description for t in ordered]
+    assert descriptions == ["Earliest in time", "Same time shorter", "Same time longer"]
+
+
+def test_generate_schedule_ranks_overdue_before_not_overdue():
+    owner, pet, scheduler = make_owner_pet_scheduler()
+    now = datetime.now().replace(second=0, microsecond=0)
+
+    future_high = Task(
+        id=0,
+        description="Future high",
+        task_type="walk",
+        due_time=now + timedelta(hours=3),
+        duration_mins=10,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="high",
+    )
+    overdue_medium = Task(
+        id=0,
+        description="Overdue medium",
+        task_type="feeding",
+        due_time=now - timedelta(hours=1),
+        duration_mins=10,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="medium",
+    )
+
+    scheduler.add_task(future_high, owner, pet)
+    scheduler.add_task(overdue_medium, owner, pet)
+
+    ordered = scheduler.generate_schedule(owner, available_mins=60)
+    assert [t.description for t in ordered][:2] == ["Overdue medium", "Future high"]
+
+
+def test_generate_schedule_respects_available_minutes_greedy_fit():
+    owner, pet, scheduler = make_owner_pet_scheduler()
+    now = datetime.now().replace(second=0, microsecond=0)
+
+    t1 = Task(
+        id=0,
+        description="Task 1",
+        task_type="walk",
+        due_time=now + timedelta(minutes=30),
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="high",
+    )
+    t2 = Task(
+        id=0,
+        description="Task 2",
+        task_type="feeding",
+        due_time=now + timedelta(minutes=40),
+        duration_mins=15,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="high",
+    )
+    t3 = Task(
+        id=0,
+        description="Task 3",
+        task_type="play",
+        due_time=now + timedelta(minutes=50),
+        duration_mins=30,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="high",
+    )
+
+    scheduler.add_task(t1, owner, pet)
+    scheduler.add_task(t2, owner, pet)
+    scheduler.add_task(t3, owner, pet)
+
+    selected = scheduler.generate_schedule(owner, available_mins=35)
+    assert [t.description for t in selected] == ["Task 1", "Task 2"]
+    assert sum(t.duration_mins for t in selected) <= 35
+
+
+def test_complete_daily_generated_task_spawns_next_day_once():
+    owner, pet, scheduler = make_owner_pet_scheduler()
+    due_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+
+    daily_template = Task(
+        id=0,
+        description="Morning walk",
+        task_type="walk",
+        due_time=due_time,
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="medium",
+        frequency="daily",
+        is_template=True,
+    )
+    scheduler.add_task(daily_template, owner, pet)
+
+    today_tasks = scheduler.get_today_tasks(owner)
+    generated_today = next(t for t in today_tasks if t.parent_task_id == daily_template.id)
+    scheduler.complete_task(generated_today.id, owner)
+
+    tomorrow = date.today() + timedelta(days=1)
+    spawned = [
+        t for t in scheduler.get_all_tasks(owner)
+        if t.parent_task_id == daily_template.id and t.generated_for == tomorrow
+    ]
+    assert len(spawned) == 1
+
+
+def test_same_time_different_task_types_are_not_duplicates():
+    owner, pet, scheduler = make_owner_pet_scheduler()
+    same_due_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+
+    walk_task = Task(
+        id=0,
+        description="Care routine",
+        task_type="walk",
+        due_time=same_due_time,
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+    )
+    feeding_task = Task(
+        id=0,
+        description="Care routine",
+        task_type="feeding",
+        due_time=same_due_time,
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+    )
+
+    scheduler.add_task(walk_task, owner, pet)
+    scheduler.add_task(feeding_task, owner, pet)
+
+    assert len(pet.get_tasks()) == 2
+
+
+def test_duplicate_same_time_same_details_is_rejected_with_normalized_description():
+    owner, pet, scheduler = make_owner_pet_scheduler()
+    same_due_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+
+    original = Task(
+        id=0,
+        description="Morning walk around the block",
+        task_type="walk",
+        due_time=same_due_time,
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+    )
+    duplicate = Task(
+        id=0,
+        description="  morning walk around the block  ",
+        task_type="walk",
+        due_time=same_due_time,
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+    )
+
+    scheduler.add_task(original, owner, pet)
+    with pytest.raises(ValueError, match="adding task failed"):
+        scheduler.add_task(duplicate, owner, pet)
