@@ -53,6 +53,9 @@ if "next_pet_id" not in st.session_state:
 if "scheduler" not in st.session_state:
     st.session_state.scheduler = Scheduler()
 
+if "scheduled_tasks" not in st.session_state:
+    st.session_state.scheduled_tasks = None
+
 # ── Owner ──────────────────────────────────────────────────────────────────────
 st.subheader("Owner")
 oc1, oc2 = st.columns(2)
@@ -255,14 +258,41 @@ if templates:
 st.divider()
 
 st.subheader("Build Schedule")
+
 available_mins = st.number_input(
     "Available time today (minutes)", min_value=10, max_value=480, value=120
 )
 
 if st.button("Generate schedule"):
-    scheduled_tasks = st.session_state.scheduler.generate_schedule(
+    st.session_state.scheduled_tasks = st.session_state.scheduler.generate_schedule(
         st.session_state.owner,
         available_mins=int(available_mins),
     )
+
+if st.session_state.scheduled_tasks is not None:
+    st.write("**Filter schedule:**")
+    fc1, fc2 = st.columns(2)
+    with fc1:
+        completion_filter = st.selectbox(
+            "By completion status",
+            ["All", "Incomplete", "Completed"],
+            key="sched_completion_filter",
+        )
+    with fc2:
+        pet_options = ["All"] + sorted({t.pet_name for t in st.session_state.scheduled_tasks if t.pet_name})
+        pet_filter = st.selectbox(
+            "By pet name",
+            pet_options,
+            key="sched_pet_filter",
+        )
+
+    tasks_to_show = st.session_state.scheduled_tasks
+    if completion_filter == "Completed":
+        tasks_to_show = [t for t in tasks_to_show if t.is_completed]
+    elif completion_filter == "Incomplete":
+        tasks_to_show = [t for t in tasks_to_show if not t.is_completed]
+    if pet_filter != "All":
+        tasks_to_show = [t for t in tasks_to_show if t.pet_name.lower() == pet_filter.lower()]
+
     dashboard = Dashboard(st.session_state)
-    dashboard.render_schedule_details(scheduled_tasks)
+    dashboard.render_schedule_details(tasks_to_show)
