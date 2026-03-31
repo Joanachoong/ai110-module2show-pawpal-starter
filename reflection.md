@@ -33,11 +33,16 @@ Given that I merged schedule and scheduler into one class in the end given they 
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+I added constraint based on due date , completion status and pet name 
+
 - How did you decide which constraints mattered most?
+I proritized due date as the first filter because this user will be more avware of which task should be complete by today 
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
+Spawn multple task once today task is label as complete . Other thing is when the task is undo , it does not remove prespawned task, which cause multiple task prespawned task in the task section
+
 - Why is that tradeoff reasonable for this scenario?
 
 ---

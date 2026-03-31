@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime, date, timedelta
-from pawpal_system import Owner, Pet, Task, Scheduler, Dashboard
+from pawpal_system import Owner, Pet, Task, Scheduler
 
 
 def _date_label(due: datetime) -> str:
@@ -220,32 +220,25 @@ else:
             except ValueError:
                 st.warning("Task not added: A duplicate task for this pet already exists.")
 
-# Task list with mark-complete buttons
-all_tasks = [
-    task
-    for task in st.session_state.scheduler.get_all_tasks(st.session_state.owner)
-    if not task.is_template
-]
-if all_tasks:
-    st.write("**All tasks:**")
+# ── Task library (manage definitions only — no mark-complete here) ─────────────
+all_library_tasks = sorted(
+    [t for t in st.session_state.scheduler.get_all_tasks(st.session_state.owner)
+     if t.is_template or (t.frequency == "once" and t.parent_task_id == 0)],
+    key=lambda t: (t.due_time.time(), t.pet_name),
+)
+if all_library_tasks:
+    st.write("**Task library:**")
+    freq_icon = {"once": "1️⃣", "daily": "🔁", "weekly": "📅"}
     priority_badge = {"high": "🔴", "medium": "🟡", "low": "🟢"}
-    for task in sorted(all_tasks, key=lambda t: t.due_time):
-        status = "✅" if task.is_completed else "🕐"
+    for task in all_library_tasks:
         badge = priority_badge.get(task.priority, "")
-        col_info, col_btn, col_remove = st.columns([5, 1, 1])
+        ficon = freq_icon.get(task.frequency, "")
+        col_info, col_remove = st.columns([6, 1])
         with col_info:
             st.write(
-                f"{status} {badge} **{task.task_type.capitalize()}** — {task.description} "
-                f"| {task.pet_name} | {_date_label(task.due_time)} | {task.duration_mins} min"
+                f"{ficon} {badge} **{task.task_type.capitalize()}** — {task.description} "
+                f"| {task.pet_name} | {task.frequency} | {task.due_time.strftime('%I:%M %p')} | {task.duration_mins} min"
             )
-        with col_btn:
-            label = "Undo" if task.is_completed else "Done"
-            if st.button(label, key=f"toggle_{task.id}"):
-                if task.is_completed:
-                    task.is_completed = False
-                else:
-                    st.session_state.scheduler.complete_task(task.id, st.session_state.owner)
-                st.rerun()
         with col_remove:
             if st.button("Remove", key=f"remove_{task.id}"):
                 st.session_state.scheduler.remove_task(task.id)
@@ -253,27 +246,9 @@ if all_tasks:
 else:
     st.info("No tasks yet. Add one above.")
 
-templates = [
-    task
-    for task in st.session_state.scheduler.get_all_tasks(st.session_state.owner)
-    if task.is_template
-]
-if templates:
-    st.write("**Recurring templates:**")
-    for template in sorted(templates, key=lambda t: (t.pet_name, t.due_time.time())):
-        col_template, col_delete = st.columns([5, 1])
-        with col_template:
-            st.write(
-                f"🔁 **{template.task_type.capitalize()}** — {template.description} "
-                f"| {template.pet_name} | {template.frequency} | {template.due_time.strftime('%I:%M %p')}"
-            )
-        with col_delete:
-            if st.button("Delete", key=f"delete_template_{template.id}"):
-                st.session_state.scheduler.remove_task(template.id)
-                st.rerun()
-
 st.divider()
 
+# ── Schedule ───────────────────────────────────────────────────────────────────
 st.subheader("Build Schedule")
 
 available_mins = st.number_input(
@@ -311,5 +286,25 @@ if st.session_state.scheduled_tasks is not None:
     if pet_filter != "All":
         tasks_to_show = [t for t in tasks_to_show if t.pet_name.lower() == pet_filter.lower()]
 
-    dashboard = Dashboard(st.session_state)
-    dashboard.render_schedule_details(tasks_to_show)
+    st.subheader("Today's Schedule")
+    if not tasks_to_show:
+        st.info("No tasks match the current filters.")
+    else:
+        priority_badge = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+        for task in sorted(tasks_to_show, key=lambda t: t.due_time):
+            status = "✅" if task.is_completed else "🕐"
+            badge = priority_badge.get(task.priority, "")
+            col_info, col_btn = st.columns([6, 1])
+            with col_info:
+                st.write(
+                    f"{status} {badge} **{task.task_type.capitalize()}** — {task.description} "
+                    f"| {task.pet_name} | {_date_label(task.due_time)} | {task.duration_mins} min"
+                )
+            with col_btn:
+                label = "Undo" if task.is_completed else "Done"
+                if st.button(label, key=f"sched_toggle_{task.id}"):
+                    if task.is_completed:
+                        st.session_state.scheduler.undo_complete_task(task.id)
+                    else:
+                        st.session_state.scheduler.complete_task(task.id, st.session_state.owner)
+                    st.rerun()

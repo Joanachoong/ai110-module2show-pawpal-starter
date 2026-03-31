@@ -211,27 +211,55 @@ class Scheduler:
         return next((t for t in self._tasks if t.id == task_id), None)
 
     def complete_task(self, task_id: int, owner: Owner) -> None:
-        """Mark a task complete and spawn the next occurrence for recurring tasks."""
+        """Mark a task complete and spawn the next occurrence for that task's template only."""
         task = self.get_task(task_id)
-        if task is None:
+        if task is None or task.is_completed:
             return
         task.mark_complete()
 
-        frequency = task.frequency
-        template = None
-        if task.parent_task_id > 0:
-            template = self.get_task(task.parent_task_id)
-            if template is not None:
-                frequency = template.frequency
+        # Only recurring instances (spawned from a template) need a follow-up spawn.
+        if task.parent_task_id <= 0:
+            return
+        template = self.get_task(task.parent_task_id)
+        if template is None:
+            return
 
-        if frequency == "daily":
-            # Always anchor to today so an overdue task doesn't skip days
+        if template.frequency == "daily":
             next_day = date.today() + timedelta(days=1)
-            self._spawn_recurring_tasks_for_date(owner, next_day)
-        elif frequency == "weekly" and template is not None:
-            # Next weekday (Mon–Fri) after today
+            self._spawn_instance_from_template(template, owner, next_day)
+        elif template.frequency == "weekly":
             next_day = self._next_weekday(date.today())
             self._spawn_instance_from_template(template, owner, next_day)
+
+    def undo_complete_task(self, task_id: int) -> None:
+        """Reverse a completion: mark the task incomplete and remove the next-day instance that was pre-spawned."""
+        task = self.get_task(task_id)
+        if task is None or not task.is_completed:
+            return
+        task.is_completed = False
+
+        if task.parent_task_id <= 0:
+            return
+        template = self.get_task(task.parent_task_id)
+        if template is None:
+            return
+
+        if template.frequency == "daily":
+            next_day = date.today() + timedelta(days=1)
+        elif template.frequency == "weekly":
+            next_day = self._next_weekday(date.today())
+        else:
+            return
+
+        # Remove the pre-spawned next-day instance only if it hasn't been completed yet.
+        to_remove = [
+            t.id for t in self._tasks
+            if t.parent_task_id == template.id
+            and t.generated_for == next_day
+            and not t.is_completed
+        ]
+        for tid in to_remove:
+            self.remove_task(tid)
 
     def edit_task(self, task_id: int, **kwargs) -> bool:
         """Update editable task fields by task ID."""
