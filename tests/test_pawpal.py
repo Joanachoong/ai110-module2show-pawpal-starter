@@ -72,3 +72,51 @@ def test_add_same_task_daily_then_once_should_fail():
         scheduler.add_task(once_task_same_details, owner, pet)
 
     assert len(pet.get_tasks()) == 1
+
+
+def test_schedule_still_returns_today_tasks_after_duplicate_failure():
+    owner = Owner(id=1, name="Alex", email="alex@pawpal.com")
+    pet = Pet(id=1, name="Buddy", species="Dog", age=3, owner_id=owner.getId())
+    owner.add_pet(pet)
+    scheduler = Scheduler()
+
+    same_due_time = datetime.today().replace(hour=9, minute=0, second=0, microsecond=0)
+
+    daily_task = Task(
+        id=0,
+        description="Morning walk around the block",
+        task_type="walk",
+        due_time=same_due_time,
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="high",
+        frequency="daily",
+        is_template=True,
+    )
+
+    once_task_same_details = Task(
+        id=0,
+        description="Morning walk around the block",
+        task_type="walk",
+        due_time=same_due_time,
+        duration_mins=20,
+        pet_name=pet.getName(),
+        owner_name=owner.getName(),
+        priority="high",
+        frequency="once",
+        is_template=False,
+    )
+
+    scheduler.add_task(daily_task, owner, pet)
+
+    with pytest.raises(ValueError, match="adding task failed"):
+        scheduler.add_task(once_task_same_details, owner, pet)
+
+    # Even after the duplicate add failure, the scheduler should still generate
+    # and return today's schedule from the daily template.
+    today_schedule = scheduler.generate_schedule(owner, available_mins=60)
+
+    assert len(today_schedule) == 1
+    assert today_schedule[0].description == "Morning walk around the block"
+    assert today_schedule[0].due_time.date() == datetime.today().date()

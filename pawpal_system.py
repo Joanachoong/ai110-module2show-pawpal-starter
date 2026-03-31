@@ -117,14 +117,26 @@ class Scheduler:
 
     def _is_duplicate_task_for_pet(self, task: Task, pet: Pet) -> bool:
         """Return whether an equivalent task already exists for the pet."""
+        existing_tasks = pet.get_tasks()
+
+        # Generated recurring instances should only be unique per template per day.
+        if task.parent_task_id > 0 and task.generated_for is not None:
+            return any(
+                existing.parent_task_id == task.parent_task_id
+                and existing.generated_for == task.generated_for
+                for existing in existing_tasks
+            )
+
+        # Manual/user-entered tasks keep strict duplicate checks.
         incoming_description = task.description.strip().lower()
         return any(
             existing.task_type == task.task_type
             and existing.description.strip().lower() == incoming_description
             and existing.duration_mins == task.duration_mins
             and existing.due_time == task.due_time
-            for existing in pet.get_tasks()
+            for existing in existing_tasks
         )
+
 
     def add_task(self, task: Task, owner: Owner, pet: Pet) -> None:
         """Assign IDs and register a task for an owner and pet."""
